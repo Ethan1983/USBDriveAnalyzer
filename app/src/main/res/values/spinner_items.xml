@@ -1,0 +1,10 @@
+<resources>
+    <string-array name="spinner_items">
+        <item>/mnt/usb</item>
+        <item>/mnt/usb2</item>
+        <item>/mnt/usb3</item>
+        <item>/mnt/usb4</item>
+        <item>/mnt/media_rw/EF33-121C</item>
+        <item>/mnt/media_rw/13D3-140E</item>
+    </string-array>
+</resources>

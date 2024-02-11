@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">USBDriveAnalyzer</string>
+    <string name="list_files_recursively">List Files recursively</string>
+    <string name="clear_output">Clear</string>
+</resources>
