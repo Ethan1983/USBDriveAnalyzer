@@ -5,9 +5,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.hardware.usb.UsbManager
+import android.os.Build
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.os.storage.StorageManager
+import android.os.storage.StorageManager.StorageVolumeCallback
+import android.os.storage.StorageVolume
 import android.text.method.ScrollingMovementMethod
+import android.util.Log
 import android.view.View
 import android.widget.AdapterView
 import android.widget.AdapterView.OnItemSelectedListener
@@ -15,11 +20,13 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.Spinner
 import android.widget.TextView
+import androidx.annotation.RequiresApi
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlin.system.measureTimeMillis
+
+private const val TAG = "MainActivity"
 
 class MainActivity : AppCompatActivity() {
     private lateinit var listFilesRecursivleyButton: Button
@@ -29,12 +36,28 @@ class MainActivity : AppCompatActivity() {
     private lateinit var currentUsbMountPath: String
     private var listJob: Job? = null
 
+    private val usbFileObserver = UsbFileObserver()
+    private val storageManager by lazy { getSystemService(Context.STORAGE_SERVICE) as StorageManager }
+    private val usbStorageVolumeCallback = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        UsbStorageVolumeCallback()
+    } else {
+        null
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    private class UsbStorageVolumeCallback: StorageVolumeCallback() {
+        override fun onStateChanged(volume: StorageVolume) {
+            Log.d(TAG, "onStateChanged state: ${volume.state} directory: ${volume.directory} mediaStoreVolumeName: ${volume.mediaStoreVolumeName} isRemovable: ${volume.isRemovable}")
+        }
+    }
+
     private val usbReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
                     displayOutput("\n")
                     displayOutput("ACTION_USB_DEVICE_ATTACHED")
+                    Log.d(TAG, "ACTION_USB_DEVICE_ATTACHED")
                     listJob?.cancel()
                     listJob = lifecycleScope.launch(Dispatchers.IO) {
                         handleUsbAttach(currentUsbMountPath, this@MainActivity::displayOutput)
@@ -43,6 +66,7 @@ class MainActivity : AppCompatActivity() {
                 UsbManager.ACTION_USB_DEVICE_DETACHED -> {
                     displayOutput("\n")
                     displayOutput("ACTION_USB_DEVICE_DETACHED")
+                    Log.d(TAG, "ACTION_USB_DEVICE_DETACHED")
                     listJob?.cancel()
                     listJob = null
                 }
@@ -92,11 +116,21 @@ class MainActivity : AppCompatActivity() {
             addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
             addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
         })
+
+        usbFileObserver.startWatching()
+
+        if (usbStorageVolumeCallback != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            storageManager.registerStorageVolumeCallback(mainExecutor, usbStorageVolumeCallback)
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         unregisterReceiver(usbReceiver)
+        usbFileObserver.stopWatching()
+        if (usbStorageVolumeCallback != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            storageManager.unregisterStorageVolumeCallback(usbStorageVolumeCallback)
+        }
     }
 
     private fun displayOutput(text: String) {
